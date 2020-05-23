@@ -32,12 +32,12 @@ class Node:
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) \
-               and self.plan_duration == other.plan_duration \
-               and self.latest_arrival_time == other.latest_arrival_time \
-               and self.current_station == other.current_station \
-               and self.previous_station == other.previous_station \
-               and self.is_walk == other.is_walk \
-               and self.trip_id == other.trip_id
+            and self.plan_duration == other.plan_duration \
+            and self.latest_arrival_time == other.latest_arrival_time \
+            and self.current_station == other.current_station \
+            and self.previous_station == other.previous_station \
+            and self.is_walk == other.is_walk \
+            and self.trip_id == other.trip_id
 
     def __lt__(self, other):
         return self.latest_arrival_time >= other.latest_arrival_time
@@ -78,116 +78,115 @@ class Planner:
     def generate_children(self, state: Node):
         children = []
 
-        """
         # is_destination = (state.previous_station == None) & (state.is_walk == True) & (state.trip_id == None)
-        if (state.current_station in self.schedules.keys()):
-            for (station, schedule) in self.schedules[state.current_station].items():
+        # if (state.current_station in self.schedules.keys()):
+        for (station, schedule) in self.schedules[state.current_station].items():
 
-                print(station)
-                if station in state.visited_stations:
+            if station in state.visited_stations:
+                continue
+
+            possible_schedule = schedule[
+                schedule["arr_time"] <= state.latest_arrival_time]
+
+            print(schedule == possible_schedule)
+
+            if possible_schedule.shape[0] == 0:
+                continue
+
+            # To me the 2 parameter here is too arbitrary, consider changing for
+            # a bigger value to ensure better uncertainty levels
+            for index, row in possible_schedule.nlargest(2, 'dep_time').iterrows():
+
+                # Difference in trip_id signifies a connection, 2 mins of
+                # connection time means you should arrive at earlier station at
+                # least 2 mins earlier than the schedule
+                if state.trip_id != row.trip_id:
+                    child_latest_arrival_time = row.dep_time - \
+                        datetime.timedelta(minutes=2)
+                else:
+                    child_latest_arrival_time = row.dep_time
+
+                # TODO Add uncertainty here
+                # if self.compute_certainty(node, tripid, current_node.certainty) < self.desired_certainty:
+                #     continue
+
+                children_visited_stations = set()
+                children_visited_stations.update(state.visited_stations)
+                children_visited_stations.add(station)
+
+                stage_duration = state.latest_arrival_time - row.dep_time
+
+                children.append(Node(plan_duration=state.plan_duration + stage_duration,
+                                     latest_arrival_time=child_latest_arrival_time,
+                                     current_station=station,
+                                     previous_station=state.current_station,
+                                     is_walk=False, trip_id=row.trip_id,
+                                     visited_stations=children_visited_stations,
+                                     certainty=state.certainty, parent_node=state))
+
+        # if (self.get_station_name(state.current_station) in self.schedules.keys()):
+        #     for (station, schedule) in self.schedules[self.get_station_name(state.current_station)].items():
+        #         if station in ['Bassersdorf', 'Stettbach','Zürich HB','Zürich HB SZU']:
+        #             continue
+        #
+        #         if self.get_station_id(station) in state.visited_stations:
+        #             continue
+        #
+        #         possible_schedule = schedule[
+        #             schedule["arr_nx"] <= state.latest_arrival_time]
+        #
+        #         if possible_schedule.shape[0] == 0:
+        #             continue
+        #
+        #         # To me the 2 parameter here is too arbitrary, consider changing for
+        #         # a bigger value to ensure better uncertainty levels
+        #         for index, row in possible_schedule.nlargest(2, 'departure_time').iterrows():
+        #
+        #             # Difference in trip_id signifies a connection, 2 mins of
+        #             # connection time means you should arrive at earlier station at
+        #             # least 2 mins earlier than the schedule
+        #             if state.trip_id != row.trip_id:
+        #                 child_latest_arrival_time = row.departure_time - datetime.timedelta(minutes=2)
+        #             else:
+        #                 child_latest_arrival_time = row.departure_time
+        #
+        #             # TODO Add uncertainty here
+        #             # if self.compute_certainty(node, tripid, current_node.certainty) < self.desired_certainty:
+        #             #     continue
+        #
+        #             children_visited_stations = set()
+        #             children_visited_stations.update(state.visited_stations)
+        #             children_visited_stations.add(self.get_station_id(station))
+        #
+        #             stage_duration = state.latest_arrival_time - row.departure_time
+        #
+        #             children.append(Node(plan_duration=state.plan_duration + stage_duration,
+        #                                  latest_arrival_time=child_latest_arrival_time,
+        #                                  current_station=self.get_station_id(station),
+        #                                  previous_station=state.current_station,
+        #                                  is_walk=False, trip_id=row.trip_id,
+        #                                  visited_stations=children_visited_stations,
+        #                                  certainty=state.certainty, parent_node=state))
+        if not state.is_walk:
+
+            for index, row in self.walking_times.loc[state.current_station].iterrows():
+
+                if row.to in state.visited_stations:
                     continue
 
-                possible_schedule = schedule[
-                    schedule["arr_time"] <= state.latest_arrival_time]
+                children_visited_stations = set()
+                children_visited_stations.update(state.visited_stations)
+                children_visited_stations.add(row.to)
 
-                if possible_schedule.shape[0] == 0:
-                    continue
+                children.append(Node(plan_duration=state.plan_duration + row.walking_time,
+                                     latest_arrival_time=state.latest_arrival_time - row.walking_time,
+                                     current_station=row.to,
+                                     previous_station=state.current_station,
+                                     is_walk=True, trip_id=None,
+                                     visited_stations=children_visited_stations,
+                                     certainty=state.certainty,
+                                     parent_node=state))
 
-                # To me the 2 parameter here is too arbitrary, consider changing for
-                # a bigger value to ensure better uncertainty levels
-                for index, row in possible_schedule.nlargest(2, 'dep_time').iterrows():
-
-                    # Difference in trip_id signifies a connection, 2 mins of
-                    # connection time means you should arrive at earlier station at
-                    # least 2 mins earlier than the schedule
-                    if state.trip_id != row.trip_id:
-                        child_latest_arrival_time = row.dep_time - datetime.timedelta(minutes=2)
-                    else:
-                        child_latest_arrival_time = row.dep_time
-
-                    # TODO Add uncertainty here
-                    # if self.compute_certainty(node, tripid, current_node.certainty) < self.desired_certainty:
-                    #     continue
-
-                    children_visited_stations = set()
-                    children_visited_stations.update(state.visited_stations)
-                    children_visited_stations.add(station)
-
-                    stage_duration = state.latest_arrival_time - row.dep_time
-
-                    children.append(Node(plan_duration=state.plan_duration + stage_duration,
-                                         latest_arrival_time=child_latest_arrival_time,
-                                         current_station=station,
-                                         previous_station=state.current_station,
-                                         is_walk=False, trip_id=row.trip_id,
-                                         visited_stations=children_visited_stations,
-                                         certainty=state.certainty, parent_node=state))
-            """
-        if (self.get_station_name(state.current_station) in self.schedules.keys()):
-            for (station, schedule) in self.schedules[self.get_station_name(state.current_station)].items():
-                if station in ['Bassersdorf', 'Stettbach','Zürich HB','Zürich HB SZU']:
-                    continue
-
-                if self.get_station_id(station) in state.visited_stations:
-                    continue
-
-                possible_schedule = schedule[
-                    schedule["arr_nx"] <= state.latest_arrival_time]
-
-                if possible_schedule.shape[0] == 0:
-                    continue
-
-                # To me the 2 parameter here is too arbitrary, consider changing for
-                # a bigger value to ensure better uncertainty levels
-                for index, row in possible_schedule.nlargest(2, 'departure_time').iterrows():
-
-                    # Difference in trip_id signifies a connection, 2 mins of
-                    # connection time means you should arrive at earlier station at
-                    # least 2 mins earlier than the schedule
-                    if state.trip_id != row.trip_id:
-                        child_latest_arrival_time = row.departure_time - datetime.timedelta(minutes=2)
-                    else:
-                        child_latest_arrival_time = row.departure_time
-
-                    # TODO Add uncertainty here
-                    # if self.compute_certainty(node, tripid, current_node.certainty) < self.desired_certainty:
-                    #     continue
-
-                    children_visited_stations = set()
-                    children_visited_stations.update(state.visited_stations)
-                    children_visited_stations.add(self.get_station_id(station))
-
-                    stage_duration = state.latest_arrival_time - row.departure_time
-
-                    children.append(Node(plan_duration=state.plan_duration + stage_duration,
-                                         latest_arrival_time=child_latest_arrival_time,
-                                         current_station=self.get_station_id(station),
-                                         previous_station=state.current_station,
-                                         is_walk=False, trip_id=row.trip_id,
-                                         visited_stations=children_visited_stations,
-                                         certainty=state.certainty, parent_node=state))
-            if not state.is_walk:
-
-                for index, row in self.walking_times.loc[state.current_station].iterrows():
-
-                    if row.to in state.visited_stations:
-                        continue
-
-                    children_visited_stations = set()
-                    children_visited_stations.update(state.visited_stations)
-                    children_visited_stations.add(row.to)
-
-                    children.append(Node(plan_duration=state.plan_duration + row.walking_time,
-                                         latest_arrival_time=state.latest_arrival_time - row.walking_time,
-                                         current_station=row.to,
-                                         previous_station=state.current_station,
-                                         is_walk=True, trip_id=None,
-                                         visited_stations=children_visited_stations,
-                                         certainty=state.certainty,
-                                         parent_node=state))
-
-        else:
-            print("discarded station {}".format(state.current_station))
         return children
 
     # TODO
@@ -208,7 +207,8 @@ class Planner:
             walk = temp_node.is_walk
             certainty = temp_node.certainty
 
-            temp_dict = {'station': current_station, 'time': latest_arrival_time, 'trip_id': trip_id, 'walk': walk}
+            temp_dict = {'station': current_station,
+                         'time': latest_arrival_time, 'trip_id': trip_id, 'walk': walk}
 
             trip_str = current_station + ' ' + str(latest_arrival_time) + ' walk : ' + str(walk) + ' trip_id: ' + str(
                 trip_id)
@@ -272,7 +272,8 @@ class Planner:
 
                 if verbose:
                     print('iteration :{:d}'.format(iteration))
-                    print('total plan duration {}'.format(current_node.plan_duration))
+                    print('total plan duration {}'.format(
+                        current_node.plan_duration))
 
                 # Found the goal
                 if self.test_goal(current_node, departure_station):
@@ -308,23 +309,23 @@ class Planner:
         return distance
 
 
-walking_times_df = load_obj('walking_times')
-# timetable_dict = load_obj('timetable')
-timetable_dict = load_obj('station_tables_dictionary')
+walking_times_df = load_obj('walking_times2')
+timetable_dict = load_obj('timetable2')
+# timetable_dict = load_obj('station_tables_dictionary')
 stops_info_dict = load_obj('stops_info')
-stops_info_names_dict = load_obj('stops_info_with_names')
+stops_info_names_dict = load_obj('stops_info_with_names2')
 
 planner = Planner(schedules=timetable_dict, walking_times=walking_times_df, stops_info=stops_info_dict,
                   stops_info_names=stops_info_names_dict)
 
-max_arrival_time = datetime.timedelta(days=0, hours=14, minutes=30)
+max_arrival_time = datetime.timedelta(days=0, hours=14, minutes=6)
 
-arrival_station_id = 8587348  # zurich bahnofplatz
+# arrival_station_id = 8587348  # zurich bahnofplatz
+# departure_station_id = 8591259  # Zürich, Lochergut
 
-# departure_station_id = 8503011  # zurich wiedikon
-departure_station_id = 8530813  # zurich kreuzplatz
+departure_station_id = planner.get_station_id("Zürich, Werd")
+arrival_station_id = planner.get_station_id("Zürich, Rehalp")
 
-plan = planner.a_star(departure_station_id, arrival_station_id, max_arrival_time)
-if plan:
-    for t in plan:
-        print(t)
+plan = planner.a_star(departure_station_id,
+                      arrival_station_id, max_arrival_time, verbose=False)
+print(plan)
