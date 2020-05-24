@@ -55,7 +55,7 @@ class Node:
 class Planner:
     # TODO: Decide if create the dict here, filter df, possibly create dict gen etator
 
-    def __init__(self, schedules, walking_times, stops_info, stops_info_names, trip_route_translation, stats):
+    def __init__(self, schedules, walking_times, stops_info, stops_info_names, trip_route_translation, stats, desired_certainty=1):
         self.schedules = schedules
         self.walking_times = walking_times
         self.dict = None
@@ -63,6 +63,7 @@ class Planner:
         self.stops_info_names = stops_info_names
         self.trip_route_translation = trip_route_translation
         self.stats = None
+        self.desired_certainty = desired_certainty
 
     def test_goal(self, current_node, destination_station):
         return current_node.current_station == destination_station
@@ -85,7 +86,8 @@ class Planner:
 
     # TODO change function to support also hour, current_station, next_station,transport_type
     def compute_certainty(self, current_station, x):
-        return self.stats['arr_function'][current_station](x)
+        # return self.stats['arr_function'][current_station](x)
+        return 1
 
         # TODO : adapt time related operations with datetime
         # TODO : add uncertainty
@@ -226,7 +228,7 @@ class Planner:
                           current_station=current_station,
                           previous_station=previous_station, is_walk=is_walk,
                           parent_real_arrival_time=None,
-                          trip_id=trip_id,
+                          trip_id=trip_id, certainty=1,
                           visited_stations=visited_stations_set)
 
         # Initialize both open and closed list
