@@ -50,13 +50,14 @@ class Node:
 class Planner:
     # TODO: Decide if create the dict here, filter df, possibly create dict genetator
 
-    def __init__(self, schedules, walking_times, stops_info, stops_info_names, trip_route_translation):
+    def __init__(self, schedules, walking_times, stops_info, stops_info_names, trip_route_translation,stats):
         self.schedules = schedules
         self.walking_times = walking_times
         self.dict = None
         self.stops_info = stops_info
         self.stops_info_names = stops_info_names
         self.trip_route_translation = trip_route_translation
+        self.stats= None
 
     def test_goal(self, current_node, destination_station):
         return current_node.current_station == destination_station
@@ -77,9 +78,13 @@ class Planner:
             station_name = None
         return station_name
 
-        # TODO : add uncertainty
+    # TODO change function to support also hour, current_station, next_station,transport_type
+    def compute_uncertainty(self, current_station, x):
+        return self.stats['arr_function'][current_station](x)
 
-    # TODO : adapt time related operations with datetime
+
+        # TODO : adapt time related operations with datetime
+
     # TODO :correct bugs related to df, choose parameter to add children
     def generate_children(self, state: Node):
         children = []
@@ -153,7 +158,6 @@ class Planner:
             print("discarded station {}".format(state.current_station))
         return children
 
-    # TODO
     def compute_heuristic(self, current_station, departure_station, speed=30):
         # estimate the time it takes to go from current_station to destination station in seconds
         distance = self.compute_distance(current_station, departure_station)
@@ -192,7 +196,7 @@ class Planner:
         current_station = destination_station
         previous_station = None
 
-        is_walk = False
+        is_walk = None
         trip_id = None
         visited_stations_set = set()
         visited_stations_set.add(current_station)
