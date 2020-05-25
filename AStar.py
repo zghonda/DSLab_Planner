@@ -61,7 +61,6 @@ class Planner:
                  stats, desired_certainty=1):
         self.schedules = schedules
         self.walking_times = walking_times
-        self.dict = None
         self.stops_info = stops_info
         self.stops_info_names = stops_info_names
         self.stats_with_pairs = stats_with_pairs
@@ -92,15 +91,14 @@ class Planner:
             temp_df = self.stats_with_pairs[current_station][next_station]
             temp_df['dist_to_hour'] = abs(temp_df['arrival'] - hour)
             delay = temp_df.loc[temp_df.idxmin().dist_to_hour].avg_delay
-            return expon(scale=delay).cdf(x.total_seconds()//60)
+            return expon(scale=delay).cdf(x.total_seconds() // 60) if delay > 0 else 1
         else:
             if current_station in self.stats.index.get_level_values(0).unique():
                 temp_df = self.stats.loc[current_station]
                 temp_df['dist_to_hour'] = abs(temp_df['hour'] - hour)
                 delay = temp_df.loc[temp_df.idxmin().dist_to_hour].arr_delay
-                return expon(scale=delay).cdf(x.total_seconds()//60)
+                return expon(scale=delay).cdf(x.total_seconds() // 60) if delay > 0 else 1
 
-        # return self.stats['arr_function'][current_station](x)
         return 1
 
         # TODO : adapt time related operations with datetime
@@ -217,7 +215,7 @@ class Planner:
             trip_str = "{}, act_arr: {}, lat_arr: {}, walk: {}, trip_id: {}".format(
                 current_station, temp_node.parent_real_arrival_time, latest_arrival_time, walk, trip_id)
 
-            #print(trip_str)
+            # print(trip_str)
 
             plan_str.append(trip_str)
 
@@ -332,11 +330,11 @@ planner = Planner(schedules=timetable_dict, walking_times=walking_times_df, stop
                   stops_info_names=stops_info_names_dict, stats=stats,
                   stats_with_pairs=stats_with_pairs)
 
-max_arrival_time = datetime.timedelta(days=0, hours=12, minutes=30)
+max_arrival_time = datetime.timedelta(days=0, hours=17, minutes=30)
 
 # arrival_station_id = 8587348  # zurich bahnofplatz
-# departure_station_id = 8503000  # Zürich, Lochergut	# arrival_station_id = 8591315  # zurich rehalp
-# departure_station_id = 8591259  # Zürich, Lochergut
+#departure_station_id = 8503000  # Zürich, Lochergut	# arrival_station_id = 8591315  # zurich rehalp
+departure_station_id = 8591259  # Zürich, Lochergut
 
 
 # print(planner.get_station_name("Zürich, Bezirksgebäude"))	# arrival_station_id = planner.get_station_id("Zürich, Berninaplatz")
@@ -344,9 +342,9 @@ max_arrival_time = datetime.timedelta(days=0, hours=12, minutes=30)
 
 
 # departure_station_id = 8503011  # zurich wiedikon
-departure_station_id = planner.get_station_id("Zürich HB")
-# departure_station_id = 8530813  # zurich kreuzplatz
-arrival_station_id = planner.get_station_id("Zürich, Auzelg")
+# departure_station_id = planner.get_station_id("Zürich HB")
+arrival_station_id = 8530813  # zurich kreuzplatz
+#arrival_station_id = planner.get_station_id("Zürich, Auzelg")
 # departure_station_id = 8591427  # zurich Werd
 plan = planner.a_star(departure_station_id,
                       arrival_station_id, max_arrival_time)
