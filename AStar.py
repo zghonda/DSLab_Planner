@@ -339,9 +339,9 @@ max_arrival_time = datetime.timedelta(days=0, hours=12, minutes=30)
 
 
 # departure_station_id = 8503011  # zurich wiedikon
-departure_station_id = planner.get_station_id("Zürich, Salersteig")
+departure_station_id = planner.get_station_id("Zürich, Birchdörfli")
 # departure_station_id = 8530813  # zurich kreuzplatz
-arrival_station_id = planner.get_station_id("Zürich, Alte Trotte")
+arrival_station_id = planner.get_station_id("Zürich, Staudenbühl")
 # departure_station_id = 8591427  # zurich Werd
 plan = planner.a_star(departure_station_id,
                       arrival_station_id, max_arrival_time)
