@@ -172,7 +172,7 @@ class Planner:
                                              current_station=row.to,
                                              previous_station=state.current_station,
                                              is_walk=True, trip_id=None,
-                                             parent_real_arrival_time=state.latest_arrival_time - row.walking_time,
+                                             parent_real_arrival_time=state.latest_arrival_time,
                                              visited_stations=children_visited_stations,
                                              certainty=state.certainty,
                                              parent_node=state))
@@ -189,6 +189,11 @@ class Planner:
         # trace back the nodes and construct printable plan
         temp_node = node
         plan_str = []
+        step_tuples = []
+
+        StepTuple = namedtuple('StepTuple', ['station_name',
+                                             'station_id', 'departure_time', 'arrival_time', 'walk', 'trip_id', 'certainty'])
+
         while temp_node is not None:
             current_station = self.get_station_name(temp_node.current_station)
             latest_arrival_time = temp_node.latest_arrival_time
@@ -202,9 +207,14 @@ class Planner:
 
             plan_str.append(trip_str)
 
+            step_tuple = StepTuple(current_station, self.get_station_id(current_station), latest_arrival_time, temp_node.parent_real_arrival_time,
+                                   temp_node.is_walk, temp_node.trip_id, temp_node.certainty)
+
+            step_tuples.append(step_tuple)
+
             temp_node = temp_node.parent_node
 
-        return plan_str
+        return plan_str, step_tuples
 
     # TODO add uncertainty support
     # TODO add support for multi solution output
@@ -319,7 +329,8 @@ planner = Planner(schedules=timetable_dict, walking_times=walking_times_df, stop
 max_arrival_time = datetime.timedelta(days=0, hours=12, minutes=30)
 
 # arrival_station_id = 8587348  # zurich bahnofplatz
-# departure_station_id = 8503000  # Zürich, Lochergut	# arrival_station_id = 8591315  # zurich rehalp
+# # Zürich, Lochergut	# arrival_station_id = 8591315  # zurich rehalp
+# # departure_station_id = 8503000
 # departure_station_id = 8591259  # Zürich, Lochergut
 
 
@@ -328,12 +339,17 @@ max_arrival_time = datetime.timedelta(days=0, hours=12, minutes=30)
 
 
 # departure_station_id = 8503011  # zurich wiedikon
-departure_station_id = planner.get_station_id("Zürich HB")
+departure_station_id = planner.get_station_id("Zürich, Salersteig")
 # departure_station_id = 8530813  # zurich kreuzplatz
-arrival_station_id = planner.get_station_id("Zürich, Auzelg")
+arrival_station_id = planner.get_station_id("Zürich, Alte Trotte")
 # departure_station_id = 8591427  # zurich Werd
 plan = planner.a_star(departure_station_id,
                       arrival_station_id, max_arrival_time)
-if plan:
-    for t in plan:
+if plan[0]:
+    for t in plan[0]:
         print(t)
+if plan[0]:
+    for t in plan[1]:
+        print(t)
+#
+# print(plan[1])
