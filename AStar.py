@@ -4,8 +4,10 @@ from collections import namedtuple
 import pickle
 import pandas as pd
 from geopy.distance import distance as geo_distance
+from scipy.stats import expon
 
 NodeTuple = namedtuple('NodeTuple', ['plan_duration', 'node'])
+StepTuple = namedtuple('StepTuple', ['station_id', 'departure_time', 'arrival_time', 'walk', 'trip_id', 'certainty'])
 
 
 def load_obj(name):
@@ -33,12 +35,12 @@ class Node:
 
     def __eq__(self, other):
         return isinstance(other, self.__class__) \
-            and self.plan_duration == other.plan_duration \
-            and self.latest_arrival_time == other.latest_arrival_time \
-            and self.current_station == other.current_station \
-            and self.previous_station == other.previous_station \
-            and self.is_walk == other.is_walk \
-            and self.trip_id == other.trip_id
+               and self.plan_duration == other.plan_duration \
+               and self.latest_arrival_time == other.latest_arrival_time \
+               and self.current_station == other.current_station \
+               and self.previous_station == other.previous_station \
+               and self.is_walk == other.is_walk \
+               and self.trip_id == other.trip_id
 
     def __lt__(self, other):
         return self.latest_arrival_time >= other.latest_arrival_time
@@ -55,23 +57,19 @@ class Node:
 class Planner:
     # TODO: Decide if create the dict here, filter df, possibly create dict gen etator
 
-    def __init__(self, schedules, walking_times, stops_info, stops_info_names, trip_route_translation, stats, desired_certainty=1):
+    def __init__(self, schedules, walking_times, stops_info, stops_info_names, stats_with_pairs,
+                 stats, desired_certainty=1):
         self.schedules = schedules
         self.walking_times = walking_times
         self.dict = None
         self.stops_info = stops_info
         self.stops_info_names = stops_info_names
-        self.trip_route_translation = trip_route_translation
-        self.stats = None
+        self.stats_with_pairs = stats_with_pairs
+        self.stats = stats
         self.desired_certainty = desired_certainty
 
     def test_goal(self, current_node, destination_station):
         return current_node.current_station == destination_station
-
-    def get_route_id(self, trip_id):
-        if trip_id is None:
-            return None
-        return self.trip_route_translation[trip_id]
 
     def get_station_id(self, name):
         station_id = self.stops_info_names[name]['stop_id']
@@ -85,7 +83,23 @@ class Planner:
         return station_name
 
     # TODO change function to support also hour, current_station, next_station,transport_type
-    def compute_certainty(self, current_station, x):
+    def compute_certainty(self, x, current_station, next_station, time):
+        hour = time.total_seconds() // 3600
+
+        if (current_station in self.stats_with_pairs.keys()) and (
+                next_station in self.stats_with_pairs[current_station].keys()):
+
+            temp_df = self.stats_with_pairs[current_station][next_station]
+            temp_df['dist_to_hour'] = abs(temp_df['arrival'] - hour)
+            delay = temp_df.loc[temp_df.idxmin().dist_to_hour].avg_delay
+            return expon(scale=delay).cdf(x.total_seconds()//60)
+        else:
+            if current_station in self.stats.index.get_level_values(0).unique():
+                temp_df = self.stats.loc[current_station]
+                temp_df['dist_to_hour'] = abs(temp_df['hour'] - hour)
+                delay = temp_df.loc[temp_df.idxmin().dist_to_hour].arr_delay
+                return expon(scale=delay).cdf(x.total_seconds()//60)
+
         # return self.stats['arr_function'][current_station](x)
         return 1
 
@@ -120,16 +134,18 @@ class Planner:
                     # least 2 mins earlier than the schedule
                     if (state.trip_id != row.trip_id) and (state.trip_id is not None):
                         child_latest_arrival_time = row.dep_time - \
-                            datetime.timedelta(minutes=2)
+                                                    datetime.timedelta(minutes=2)
                         # stage_duration = state.latest_arrival_time - \
                         #     row.dep_time + datetime.timedelta(minutes=2)
                         stage_duration = state.latest_arrival_time - \
-                            child_latest_arrival_time
+                                         child_latest_arrival_time
 
                         delay_margin = state.latest_arrival_time - row.arr_time
 
-                        node_certainty = self.compute_certainty(
-                            state.current_station, delay_margin) * state.certainty
+                        node_certainty = self.compute_certainty(x=delay_margin,
+                                                                current_station=state.current_station,
+                                                                next_station=station,
+                                                                time=child_latest_arrival_time) * state.certainty
 
                         if node_certainty < self.desired_certainty:
                             continue
@@ -172,7 +188,7 @@ class Planner:
                                              current_station=row.to,
                                              previous_station=state.current_station,
                                              is_walk=True, trip_id=None,
-                                             parent_real_arrival_time=state.latest_arrival_time - row.walking_time,
+                                             parent_real_arrival_time=state.latest_arrival_time,
                                              visited_stations=children_visited_stations,
                                              certainty=state.certainty,
                                              parent_node=state))
@@ -189,6 +205,7 @@ class Planner:
         # trace back the nodes and construct printable plan
         temp_node = node
         plan_str = []
+        plan = []
         while temp_node is not None:
             current_station = self.get_station_name(temp_node.current_station)
             latest_arrival_time = temp_node.latest_arrival_time
@@ -200,6 +217,8 @@ class Planner:
             trip_str = "{}, act_arr: {}, lat_arr: {}, walk: {}, trip_id: {}".format(
                 current_station, temp_node.parent_real_arrival_time, latest_arrival_time, walk, trip_id)
 
+            #print(trip_str)
+
             plan_str.append(trip_str)
 
             temp_node = temp_node.parent_node
@@ -209,8 +228,7 @@ class Planner:
     # TODO add uncertainty support
     # TODO add support for multi solution output
     # TODO add verbose output
-    def a_star(self, departure_station, destination_station, arrival_time,
-               uncertainty_level=None, verbose=True):
+    def a_star(self, departure_station, destination_station, arrival_time, verbose=True):
 
         # Create start node
         plan_duration = datetime.timedelta()
@@ -283,7 +301,6 @@ class Planner:
                         f = child.plan_duration.total_seconds() + self.compute_heuristic(
                             current_station=child.current_station,
                             departure_station=departure_station)
-                        # f = child.plan_duration.total_seconds()
 
                         child_node_tuple = NodeTuple(f, child)
 
@@ -306,15 +323,14 @@ class Planner:
 
 walking_times_df = load_obj('walking_times')
 timetable_dict = load_obj('timetable1')
-# trip_route_translation_dict = load_obj('trip_route_translation')
-trip_route_translation_dict = None
-stats = None
+stats_with_pairs = load_obj('stats_with_pairs')
+stats = load_obj('stats')
 stops_info_dict = load_obj('stops_info_with_id')
 stops_info_names_dict = load_obj('stops_info_with_names')
 
 planner = Planner(schedules=timetable_dict, walking_times=walking_times_df, stops_info=stops_info_dict,
-                  stops_info_names=stops_info_names_dict, trip_route_translation=trip_route_translation_dict, stats=stats)
-
+                  stops_info_names=stops_info_names_dict, stats=stats,
+                  stats_with_pairs=stats_with_pairs)
 
 max_arrival_time = datetime.timedelta(days=0, hours=12, minutes=30)
 
