@@ -8,7 +8,7 @@ from scipy.stats import expon
 
 NodeTuple = namedtuple('NodeTuple', ['plan_duration', 'arrival_time', 'node'])
 StepTuple = namedtuple('StepTuple', ['station_name',
-                                     'station_id', 'departure_time', 'arrival_time', 'walk', 'trip_id', 'certainty'])
+                                     'station_id', 'departure_time', 'arrival_time', 'walk', 'trip_id'])
 
 
 def load_obj(name):
@@ -95,7 +95,6 @@ class Planner:
                     next_station in self.stats_with_pairs_jo[current_station].keys()):
                 temp_df = self.stats_with_pairs_jo[current_station][next_station]
 
-
         if temp_df is not None:
             temp_df['dist_to_hour'] = abs(temp_df['arrival'] - hour)
             delay = temp_df.loc[temp_df.idxmin().dist_to_hour].avg_delay
@@ -135,12 +134,10 @@ class Planner:
                                          child_latest_arrival_time
 
                         delay_margin = state.latest_arrival_time - row.arr_time
-                        print(delay_margin)
                         node_certainty = self.compute_certainty(x=delay_margin,
                                                                 current_station=state.current_station,
                                                                 next_station=station,
                                                                 time=child_latest_arrival_time) * state.certainty
-                        print(node_certainty)
 
                         if node_certainty < self.desired_certainty:
                             continue
@@ -200,7 +197,7 @@ class Planner:
         # trace back the nodes and construct printable plan
         temp_node = node
         step_tuples = []
-
+        certainty = 1
         while temp_node is not None:
             current_station = self.get_station_name(temp_node.current_station)
             latest_arrival_time = temp_node.latest_arrival_time
@@ -210,16 +207,16 @@ class Planner:
 
             step_tuple = StepTuple(current_station, self.get_station_id(current_station), latest_arrival_time,
                                    temp_node.parent_real_arrival_time,
-                                   temp_node.is_walk, temp_node.trip_id, temp_node.certainty)
+                                   temp_node.is_walk, temp_node.trip_id)
 
+            certainty = temp_node.certainty
             step_tuples.append(step_tuple)
 
             temp_node = temp_node.parent_node
 
-        return step_tuples
+        return certainty, step_tuples
 
-    # TODO add support for multi solution output
-    def a_star(self, departure_station, destination_station, arrival_time, verbose=True):
+    def a_star(self, departure_station, destination_station, arrival_time, verbose=False):
 
         # Create start node
         plan_duration = datetime.timedelta()
@@ -274,7 +271,7 @@ class Planner:
                     print('iteration :{:d}'.format(iteration))
                     print('total plan duration {}'.format(
                         current_node.plan_duration))
-                    # print(current_node.certainty)
+                    print(self.count)
 
                 # Found the goal
                 if self.test_goal(current_node, departure_station):
@@ -310,31 +307,48 @@ class Planner:
         return distance
 
 
-walking_times_df = load_obj('walking_times')
-timetable_dict = load_obj('timetable1')
-stats_with_pairs = load_obj('stats_with_pairs')
-stats_with_pairs_jo = load_obj('stats_with_pairs_jo')
-stops_info_dict = load_obj('stops_info_with_id')
-stops_info_names_dict = load_obj('stops_info_with_names')
+def init_planner(desired_certainty):
+    walking_times_df = load_obj('walking_times')
+    timetable_dict = load_obj('timetable')
+    stats_with_pairs = load_obj('stats_with_pairs')
+    stats_with_pairs_jo = load_obj('stats_with_pairs_jo')
+    stops_info_dict = load_obj('stops_info_with_id')
+    stops_info_names_dict = load_obj('stops_info_with_names')
 
-planner = Planner(schedules=timetable_dict, walking_times=walking_times_df, stops_info=stops_info_dict,
-                  stops_info_names=stops_info_names_dict, stats_with_pairs_jo=stats_with_pairs_jo,
-                  stats_with_pairs=stats_with_pairs, desired_certainty=0.7)
+    planner = Planner(schedules=timetable_dict, walking_times=walking_times_df, stops_info=stops_info_dict,
+                      stops_info_names=stops_info_names_dict, stats_with_pairs_jo=stats_with_pairs_jo,
+                      stats_with_pairs=stats_with_pairs, desired_certainty=desired_certainty)
 
-max_arrival_time = datetime.timedelta(days=0, hours=12, minutes=30)
+    return planner
 
-# arrival_station_id = 8587348  # zurich bahnofplatz
-# departure_station_id = 8503000  # Zürich, HB	# arrival_station_id = 8591315  # zurich rehalp
 
-departure_station_id = planner.get_station_id("Zürich, Hügelstrasse")
+planner = init_planner(0.5)
+plan = planner.a_star(8503000, 8591049, datetime.timedelta(hours=12, minutes=30))
 
-# departure_station_id = planner.get_station_id("Zürich, Binz")
 
-arrival_station_id = planner.get_station_id("Zürich, Kanonengasse")
-# arrival_station_id = planner.get_station_id("Zürich, Auzelg")
+def stringify_plan(plan):
+    result_str = ''
+    for i in range(len(plan) - 1):
+        result_str += "{} ({}) at {} -> {} ({}) at {} :  {} ".format(plan[i].station_name, plan[i].station_id,
+                                                                     to_time(plan[i].departure_time),
+                                                                     plan[i + 1].station_name,
+                                                                     plan[i + 1].station_id,
+                                                                     to_time(plan[i].arrival_time), plan[i].trip_id)
+        if (plan[i].walk):
+            result_str += " [Walk] \n"
+        else:
+            result_str += '\n'
+    return result_str
 
-plan = planner.a_star(departure_station_id,
-                      arrival_station_id, max_arrival_time)
-if plan:
-    for t in plan:
-        print(t)
+
+def to_time(time_delta):
+    if time_delta is None:
+        return None
+
+    h = time_delta.total_seconds() // 3600
+    m = (time_delta.total_seconds() % 3600) // 60
+    s = (time_delta.total_seconds() - h * 3600 - m * 60)
+    return "{:d}:{:d}:{:d}".format(int(h), int(m), int(s))
+
+
+print(stringify_plan(plan[1]))
